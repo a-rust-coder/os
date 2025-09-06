@@ -1,0 +1,10 @@
+[package]
+name = "os"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+filesystem = { path = "./libs/filesystem/" }
+
+[workspace]
+members = ["libs/filesystem", "libs/mutex"]
