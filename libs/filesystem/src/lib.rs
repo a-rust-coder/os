@@ -1,14 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
 #[cfg(feature = "std")]
 pub mod std_helpers;
 
-use mutex::Mutex;
 #[cfg(feature = "std")]
 pub use std_helpers::*;
 
 /// MBR partition table implementation
 pub mod mbr;
+
+pub mod wrappers;
 
 pub trait Disk {
     /// The buffer size is the sector size
@@ -28,28 +31,42 @@ pub enum DiskErr {
     /// `found` is the size of the provided buffer
     ///
     /// `available` is a list of the supported sector sizes
-    InvalidSectorSize { found: usize, supported: SectorSize },
+    InvalidSectorSize {
+        found: usize,
+        supported: SectorSize,
+        /// `start % sector_size` should be zero.
+        start: usize,
+    },
 
     /// Will trigger if the sector index is out of the range of the disk.
     ///
     /// `found` is the provided sector index (lba)
     ///
     /// `max` is the last existing sector index **with the size of the given buffer**
-    InvalidSectorIndex { found: usize, max: usize },
+    InvalidSectorIndex {
+        found: usize,
+        max: usize,
+    },
 
     /// Will trigger if a write is performed on a read-only disk or if the program tries to read a
     /// write-only disk
-    InvalidPermission { disk_permission: Permission },
+    InvalidPermission {
+        disk_permission: Permission,
+    },
 
     /// Will trigger if, for any reason, the disk is not found anymore
     UnreachableDisk,
+
+    InvalidDiskSize,
+
+    Busy,
 
     IOErr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DiskInfos {
-    pub sector_sizes: SectorSize,
+    pub sector_size: SectorSize,
     /// The disk size in bytes
     pub disk_size: usize,
     /// Specially useful when working with disk images, or without `sudo` privileges
@@ -80,10 +97,9 @@ pub enum SectorSize {
 /// `Disk` IMPLEMENTATION RESPONSIBILTY TO CHECK THE PERMISSION, THE CALLER MAY TRY ILLEGAL
 /// OPERATIONS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Permission {
-    ReadOnly,
-    WriteOnly,
-    ReadWrite,
+pub struct Permission {
+    pub read: bool,
+    pub write: bool,
 }
 
 impl SectorSize {

@@ -19,7 +19,7 @@ pub struct DiskFile {
 
 impl Disk for DiskFile {
     fn read_sector(&self, sector: usize, buf: &mut [u8]) -> Result<(), DiskErr> {
-        if self.perm == Permission::WriteOnly {
+        if !self.perm.read {
             return Err(DiskErr::InvalidPermission {
                 disk_permission: self.perm,
             });
@@ -31,6 +31,7 @@ impl Disk for DiskFile {
             return Err(DiskErr::InvalidSectorSize {
                 found: sector_size,
                 supported: self.sector_size,
+                start: 0,
             });
         }
 
@@ -55,7 +56,7 @@ impl Disk for DiskFile {
     }
 
     fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
-        if self.perm == Permission::ReadOnly {
+        if !self.perm.write {
             return Err(DiskErr::InvalidPermission {
                 disk_permission: self.perm,
             });
@@ -67,6 +68,7 @@ impl Disk for DiskFile {
             return Err(DiskErr::InvalidSectorSize {
                 found: sector_size,
                 supported: self.sector_size,
+                start: 0,
             });
         }
 
@@ -92,7 +94,7 @@ impl Disk for DiskFile {
 
     fn disk_infos(&self) -> Result<DiskInfos, DiskErr> {
         Ok(DiskInfos {
-            sector_sizes: self.sector_size,
+            sector_size: self.sector_size,
             disk_size: self.size,
             permission: self.perm,
         })
@@ -122,24 +124,11 @@ impl DiskFile {
         sector_conf: SectorSize,
         permission: Permission,
     ) -> io::Result<Self> {
-        let file = match permission {
-            Permission::ReadOnly => File::options()
-                .create_new(false)
-                .read(true)
-                .write(false)
-                .open(file)?,
-            Permission::WriteOnly => File::options()
-                .create_new(false)
-                .read(false)
-                .write(true)
-                .open(file)?,
-            Permission::ReadWrite => File::options()
-                .create_new(false)
-                .read(true)
-                .write(true)
-                .open(file)?,
-        };
-
+        let file = File::options()
+            .create_new(false)
+            .write(permission.write)
+            .read(permission.read)
+            .open(file)?;
         let size = file.metadata()?.len() as usize;
 
         Ok(Self {
