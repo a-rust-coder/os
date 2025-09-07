@@ -1,3 +1,4 @@
+//! A simple `Mutex` implementation.
 #![no_std]
 
 use core::{

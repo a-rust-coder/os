@@ -1,27 +1,29 @@
+use crate::{Disk, DiskErr, DiskInfos, Permissions, SectorSize};
+use mutex::Mutex;
 use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom, Write},
     path::PathBuf,
 };
 
-use mutex::Mutex;
-
-use crate::{Disk, DiskErr, DiskInfos, Permission, SectorSize};
-
+/// Wrapper type for a disk image
 #[derive(Debug)]
 pub struct DiskFile {
     sector_size: SectorSize,
-    /// In bytes
+    /// Size of the file/disk, in bytes
     size: usize,
-    perm: Permission,
+    /// Permissions of the disk. The file is opened with the same permissions.
+    permissions: Permissions,
     file: Mutex<File>,
 }
 
 impl Disk for DiskFile {
     fn read_sector(&self, sector: usize, buf: &mut [u8]) -> Result<(), DiskErr> {
-        if !self.perm.read {
+        // ### CHECKS FOR INVALID REQUEST ###
+
+        if !self.permissions.read {
             return Err(DiskErr::InvalidPermission {
-                disk_permission: self.perm,
+                disk_permissions: self.permissions,
             });
         }
 
@@ -43,6 +45,8 @@ impl Disk for DiskFile {
                 max: self.size / sector_size,
             });
         }
+
+        // ### PERFORMS THE READ OPERATION ON THE FILE ###
 
         if let Err(_) = self.file.lock().seek(SeekFrom::Start(offset as u64)) {
             return Err(DiskErr::IOErr);
@@ -56,9 +60,11 @@ impl Disk for DiskFile {
     }
 
     fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
-        if !self.perm.write {
+        // ### CHECKS FOR INVALID REQUEST ###
+
+        if !self.permissions.write {
             return Err(DiskErr::InvalidPermission {
-                disk_permission: self.perm,
+                disk_permissions: self.permissions,
             });
         }
 
@@ -80,6 +86,8 @@ impl Disk for DiskFile {
                 max: self.size / sector_size,
             });
         }
+
+        // ### PERFORMS THE WRITE OPERATION ON THE FILE ###
 
         if let Err(_) = self.file.lock().seek(SeekFrom::Start(offset as u64)) {
             return Err(DiskErr::IOErr);
@@ -96,33 +104,32 @@ impl Disk for DiskFile {
         Ok(DiskInfos {
             sector_size: self.sector_size,
             disk_size: self.size,
-            permission: self.perm,
+            permissions: self.permissions,
         })
     }
 }
 
 impl DiskFile {
+    /// Creates a new file to handle the disk image. Will result in an error if the file already
+    /// exists.
     pub fn new(
         path: PathBuf,
         size: usize,
         sector_conf: SectorSize,
-        permission: Permission,
+        permission: Permissions,
     ) -> io::Result<Self> {
-        let file = File::create_new(path)?;
+        let file = File::create_new(path.clone())?;
         file.set_len(size as u64)?;
+        drop(file);
 
-        io::Result::Ok(Self {
-            file: Mutex::new(file),
-            sector_size: sector_conf,
-            size,
-            perm: permission,
-        })
+        Self::from_file(path, sector_conf, permission)
     }
 
+    /// Opens an existing file. Will result in an error if the file doesn't exist.
     pub fn from_file(
         file: PathBuf,
         sector_conf: SectorSize,
-        permission: Permission,
+        permission: Permissions,
     ) -> io::Result<Self> {
         let file = File::options()
             .create_new(false)
@@ -134,7 +141,7 @@ impl DiskFile {
         Ok(Self {
             sector_size: sector_conf,
             size,
-            perm: permission,
+            permissions: permission,
             file: Mutex::new(file),
         })
     }

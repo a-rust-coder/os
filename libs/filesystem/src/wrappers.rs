@@ -1,4 +1,4 @@
-use crate::{Disk, DiskErr, DiskInfos, Permission, SectorSize};
+use crate::{Disk, DiskErr, DiskInfos, Permissions, SectorSize};
 use alloc::{
     boxed::Box,
     sync::{Arc, Weak},
@@ -6,14 +6,21 @@ use alloc::{
 };
 use mutex::Mutex;
 
+/// A global wrapper that can be created from any `Disk`. Is used only for creating `SubDisk`s
 pub struct DiskWrapper {
+    /// The disk from where it has been created
     disk: Box<dyn Disk>,
+    /// The space borrowed for reading [start, end[
     r_borrows: Mutex<Vec<(usize, usize)>>,
+    /// The space borrowed for writing [start, end[
     w_borrows: Mutex<Vec<(usize, usize)>>,
+    /// A weak reference to self, used to give access to the `DiskWrapper` to all the `SubDisk`s
+    /// created from it
     weak_self: Mutex<Weak<Self>>,
 }
 
 impl DiskWrapper {
+    /// Creates a new wrapper from a disk
     pub fn new(disk: Box<dyn Disk>) -> Arc<Self> {
         let slf = Arc::new(Self {
             disk,
@@ -26,6 +33,9 @@ impl DiskWrapper {
         slf
     }
 
+    /// Checks if a specific range of space is borrowed for reading. If any part of the range is
+    /// borrowed for reading, returns true. There is not possibility to fail for this function, so
+    /// it will correctly return even if the disk is not available.
     pub fn is_r_borrowed(&self, start: usize, end: usize) -> bool {
         for i in &*self.r_borrows.lock() {
             if (i.0 <= start && start < i.1) || (i.0 < end && end <= i.1) {
@@ -35,6 +45,9 @@ impl DiskWrapper {
         false
     }
 
+    /// Checks if a specific range of space is borrowed for writing. If any part of the range is
+    /// borrowed for reading, returns true. There is not possibility to fail for this function, so
+    /// it will correctly return even if the disk is not available.
     pub fn is_w_borrowed(&self, start: usize, end: usize) -> bool {
         for i in &*self.w_borrows.lock() {
             if (i.0 <= start && start < i.1) || (i.0 < end && end <= i.1) {
@@ -44,13 +57,19 @@ impl DiskWrapper {
         false
     }
 
+    /// Creates a new subdisk in a given range of space, with the specified permissions. This
+    /// function ensures the space is not already borrowed for read/write (depending on the
+    /// permissions). The read/write borrows follow the Rust borrowing rule: one mutable (write or
+    /// read/write) borrow or unlimited immutable borrows (read only).
     pub fn subdisk(
         &self,
         start: usize,
         end: usize,
-        permission: Permission,
+        permissions: Permissions,
     ) -> Result<SubDisk, DiskErr> {
-        if self.is_w_borrowed(start, end) || (self.is_r_borrowed(start, end) && permission.write) {
+        // ### CHECKS IF THE SPACE IS AVAILABLE ###
+
+        if self.is_w_borrowed(start, end) || (self.is_r_borrowed(start, end) && permissions.write) {
             return Err(DiskErr::Busy);
         }
 
@@ -58,13 +77,17 @@ impl DiskWrapper {
             return Err(DiskErr::InvalidDiskSize);
         }
 
-        if permission.read {
+        // ### REGISTERS THE SPACE AS USED ###
+
+        if permissions.read {
             self.r_borrows.lock().push((start, end));
         }
 
-        if permission.write {
+        if permissions.write {
             self.w_borrows.lock().push((start, end));
         }
+
+        // ### CREATES THE SUBDISK ###
 
         let sector_size = self.disk_infos()?.sector_size;
         let parent = self.weak_self.lock().clone();
@@ -74,13 +97,15 @@ impl DiskWrapper {
             start,
             end,
             sector_size,
-            permission,
+            permissions,
         })
     }
 }
 
 impl Disk for DiskWrapper {
     fn read_sector(&self, sector: usize, buf: &mut [u8]) -> Result<(), DiskErr> {
+        // ### VERIFIES IF THE SECTION IS CURRENTLY BORROWED ###
+
         let start = sector * buf.len();
         let end = start + buf.len();
 
@@ -92,6 +117,8 @@ impl Disk for DiskWrapper {
     }
 
     fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
+        // ### VERIFIES IF THE SECTION IS CURRENTLY BORROWED ###
+
         let start = sector * buf.len();
         let end = start + buf.len();
 
@@ -112,21 +139,27 @@ pub struct SubDisk {
     start: usize,
     end: usize,
     sector_size: SectorSize,
-    permission: Permission,
+    permissions: Permissions,
 }
 
 impl Disk for SubDisk {
     fn read_sector(&self, sector: usize, buf: &mut [u8]) -> Result<(), DiskErr> {
+        // ### GETS THE PARENT ###
+
         let parent = match self.parent.upgrade() {
             Some(v) => v,
             None => return Err(DiskErr::UnreachableDisk),
         };
 
-        if !self.permission.read {
+        // ### CHECKS THE PERMISSIONS ###
+
+        if !self.permissions.read {
             return Err(DiskErr::InvalidPermission {
-                disk_permission: self.permission,
+                disk_permissions: self.permissions,
             });
         }
+
+        // ### VERIFIES THE SECTOR SIZE ###
 
         let sector_size = buf.len();
 
@@ -141,6 +174,8 @@ impl Disk for SubDisk {
                 start: self.start,
             });
         }
+
+        // ### VERIFIES IF THE SECTOR IS IN THE SUBDISK RANGE ###
 
         let offset = self.start + sector_size * sector;
 
@@ -157,16 +192,22 @@ impl Disk for SubDisk {
     }
 
     fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
+        // ### GETS THE PARENT ###
+
         let parent = match self.parent.upgrade() {
             Some(v) => v,
             None => return Err(DiskErr::UnreachableDisk),
         };
 
-        if !self.permission.write {
+        // ### CHECKS THE PERMISSIONS ###
+
+        if !self.permissions.write {
             return Err(DiskErr::InvalidPermission {
-                disk_permission: self.permission,
+                disk_permissions: self.permissions,
             });
         }
+
+        // ### VERIFIES THE SECTOR SIZE ###
 
         let sector_size = buf.len();
 
@@ -181,6 +222,8 @@ impl Disk for SubDisk {
                 start: self.start,
             });
         }
+
+        // ### VERIFIES IF THE SECTOR IS IN THE SUBDISK RANGE ###
 
         let offset = self.start + sector_size * sector;
 
@@ -200,15 +243,17 @@ impl Disk for SubDisk {
         Ok(DiskInfos {
             sector_size: self.sector_size,
             disk_size: self.end - self.start,
-            permission: self.permission,
+            permissions: self.permissions,
         })
     }
 }
 
 impl Drop for SubDisk {
     fn drop(&mut self) {
+        // Gets the parent. If the parent has been dropped, no need to do nothing.
         if let Some(parent) = self.parent.upgrade() {
-            if self.permission.read {
+            // Remove the subdisk range from the read borrows if needed
+            if self.permissions.read {
                 let mut r_borrows = parent.r_borrows.lock();
                 let idx = r_borrows
                     .iter()
@@ -216,7 +261,8 @@ impl Drop for SubDisk {
                     .unwrap();
                 r_borrows.swap_remove(idx);
             }
-            if self.permission.write {
+            // Remove the subdisk range from the write borrows if needed
+            if self.permissions.write {
                 let mut w_borrows = parent.w_borrows.lock();
                 let idx = w_borrows
                     .iter()

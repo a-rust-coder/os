@@ -1,15 +1,15 @@
 use std::{fs::remove_file, path::PathBuf};
 
-use filesystem::{Disk, DiskFile, Permission, SectorSize, wrappers::DiskWrapper};
+use filesystem::{Disk, DiskFile, Permissions, SectorSize, wrappers::DiskWrapper};
 
 fn main() {
-    let _ = remove_file("disk.img");
+    let _ = remove_file("target/disk.img");
 
     let disk = DiskFile::new(
-        PathBuf::from("disk.img"),
+        PathBuf::from("target/disk.img"),
         2048,
         SectorSize::AllOf(&[512, 1024]),
-        Permission {
+        Permissions {
             read: true,
             write: true,
         },
@@ -26,7 +26,7 @@ fn main() {
         .subdisk(
             512,
             2048,
-            Permission {
+            Permissions {
                 read: true,
                 write: true,
             },
@@ -38,7 +38,7 @@ fn main() {
         .subdisk(
             1024,
             2048,
-            Permission {
+            Permissions {
                 read: true,
                 write: true,
             },
