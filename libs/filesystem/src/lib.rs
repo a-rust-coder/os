@@ -75,6 +75,8 @@ pub enum DiskErr {
 
     /// Will trigger for all the errors coming from IO processes
     IOErr,
+
+    UnsupportedDiskSectorSize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,12 +98,12 @@ pub enum SectorSize {
     /// All sector sizes in the list are supported
     AllOf(&'static [usize]),
     /// All sector sizes are supported expected the ones in the list
-    AnyExpected(&'static [usize]),
+    AnyExcept(&'static [usize]),
 
     /// All sector sizes in one of the ranges are supported. min <= size < max
     InRanges(&'static [(usize, usize)]),
     /// All sector sizes are supported expected the ones in one of these ranges. min <= size < max
-    AnyExpectedRanges(&'static [(usize, usize)]),
+    AnyExceptRanges(&'static [(usize, usize)]),
 }
 
 /// These permissions are only intented for disk usage, **not** for filesystems. They only are a
@@ -144,11 +146,92 @@ impl SectorSize {
         (match self {
             Self::Any => true,
             Self::AllOf(l) => l.contains(&sector_size),
-            Self::AnyExpected(l) => !l.contains(&sector_size),
+            Self::AnyExcept(l) => !l.contains(&sector_size),
             Self::InRanges(rs) => rs.iter().any(|r| r.0 <= sector_size && sector_size < r.1),
-            Self::AnyExpectedRanges(rs) => {
+            Self::AnyExceptRanges(rs) => {
                 !rs.iter().any(|r| r.0 <= sector_size && sector_size < r.1)
             }
         }) && (sector_size <= disk_size)
+    }
+
+    /// Returns the minimal supported sector size greater than or equal to `sector_size` if any
+    /// exists.
+    pub fn minimal_ge(&self, sector_size: usize) -> Option<usize> {
+        match self {
+            Self::Any => Some(sector_size),
+            Self::AllOf(l) => {
+                let mut min = None;
+                for &i in *l {
+                    if i == sector_size {
+                        min = Some(sector_size);
+                        break;
+                    }
+
+                    if i > sector_size {
+                        if min.map_or(true, |m| i < m) {
+                            min = Some(i)
+                        }
+                    }
+                }
+                min
+            }
+            Self::AnyExcept(l) => {
+                let mut min = sector_size;
+                let mut v = l.to_vec();
+                v.sort();
+
+                for i in v {
+                    if i == min {
+                        min += 1
+                    } else if i > min {
+                        break;
+                    }
+                }
+
+                Some(min)
+            }
+            Self::InRanges(ranges) => {
+                let mut min = None;
+
+                for &(start, end) in *ranges {
+                    if end <= sector_size {
+                        continue;
+                    }
+
+                    let v = if sector_size < start {
+                        start
+                    } else {
+                        sector_size
+                    };
+
+                    if min.map_or(true, |m| v < m) {
+                        min = Some(v)
+                    }
+                }
+
+                min
+            }
+            Self::AnyExceptRanges(ranges) => {
+                let mut min = sector_size;
+
+                loop {
+                    let mut inside = false;
+                    let mut bump_to = min + 1;
+
+                    for &(start, end) in *ranges {
+                        if start <= min && min < end {
+                            inside = true;
+                            bump_to = bump_to.max(end);
+                        }
+                    }
+
+                    if inside {
+                        min = bump_to;
+                    } else {
+                        break Some(min);
+                    }
+                }
+            }
+        }
     }
 }
