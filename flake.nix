@@ -36,7 +36,10 @@
                     "x86_64-unknown-none"
                     "x86_64-unknown-uefi"
                   ];
-                  extensions = [ "rust-src" ];
+                  extensions = [
+                    "rust-src"
+                    "miri"
+                  ];
                 }
               ))
             ];

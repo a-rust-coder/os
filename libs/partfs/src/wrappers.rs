@@ -134,6 +134,7 @@ impl Disk for DiskWrapper {
     }
 }
 
+#[derive(Debug)]
 pub struct SubDisk {
     parent: Weak<DiskWrapper>,
     start: usize,

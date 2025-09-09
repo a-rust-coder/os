@@ -1,14 +1,17 @@
 use std::{fs::remove_file, path::PathBuf};
 
-use filesystem::{Disk, DiskFile, Permissions, SectorSize, wrappers::DiskWrapper};
+use partfs::{
+    DiskFile, Permissions, SectorSize,
+    partition_tables::mbr::{generic_mbr::GenericMbr, partition_types},
+};
 
 fn main() {
     let _ = remove_file("target/disk.img");
 
     let disk = DiskFile::new(
         PathBuf::from("target/disk.img"),
-        2048,
-        SectorSize::AllOf(&[512, 1024]),
+        1024 * 1024,
+        SectorSize::AllOf(&[512]),
         Permissions {
             read: true,
             write: true,
@@ -16,33 +19,12 @@ fn main() {
     )
     .unwrap();
 
-    disk.write_sector(0, &[1; 1024]).unwrap();
+    let mut mbr = GenericMbr::new(Box::new(disk), None).unwrap();
 
-    let disk = DiskWrapper::new(Box::new(disk));
-
-    disk.write_sector(0, &[2; 512]).unwrap();
-
-    let subdisk = disk
-        .subdisk(
-            512,
-            2048,
-            Permissions {
-                read: true,
-                write: true,
-            },
-        )
+    mbr.create_partition(0, 1, 1024, partition_types::EMPTY)
         .unwrap();
-    drop(subdisk);
-
-    let subdisk2 = disk
-        .subdisk(
-            1024,
-            2048,
-            Permissions {
-                read: true,
-                write: true,
-            },
-        )
+    mbr.create_partition(1, 1025, 1022, partition_types::EXFAT)
         .unwrap();
 
+    mbr.write().unwrap();
 }

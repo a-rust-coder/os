@@ -6,12 +6,13 @@ extern crate alloc;
 #[cfg(feature = "std")]
 pub mod std_helpers;
 
+use core::fmt::Debug;
+
 #[cfg(feature = "std")]
 pub use std_helpers::*;
 
-/// MBR partition table implementation
-pub mod mbr;
-
+pub mod filesystems;
+pub mod partition_tables;
 /// Procides disk wrappers to allow subdisk creation. `SubDisk`s are useful when working with
 /// partitions or filesystems for example.
 pub mod wrappers;
@@ -56,11 +57,16 @@ pub enum DiskErr {
     /// `found` is the provided sector index (lba)
     ///
     /// `max` is the last existing sector index **with the size of the given buffer**
-    InvalidSectorIndex { found: usize, max: usize },
+    InvalidSectorIndex {
+        found: usize,
+        max: usize,
+    },
 
     /// Will trigger if a write is performed on a read-only disk or if the program tries to read a
     /// write-only disk
-    InvalidPermission { disk_permissions: Permissions },
+    InvalidPermission {
+        disk_permissions: Permissions,
+    },
 
     /// Will trigger if, for any reason, the disk is not found anymore.
     UnreachableDisk,
@@ -77,6 +83,8 @@ pub enum DiskErr {
     IOErr,
 
     UnsupportedDiskSectorSize,
+    InvalidPartitionIndex,
+    SpaceAlreadyInUse,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

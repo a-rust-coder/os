@@ -3,13 +3,6 @@
 version = 4
 
 [[package]]
-name = "filesystem"
-version = "0.1.0"
-dependencies = [
- "mutex",
-]
-
-[[package]]
 name = "mutex"
 version = "0.1.0"
 
@@ -17,5 +10,12 @@ version = "0.1.0"
 name = "os"
 version = "0.1.0"
 dependencies = [
- "filesystem",
+ "partfs",
+]
+
+[[package]]
+name = "partfs"
+version = "0.1.0"
+dependencies = [
+ "mutex",
 ]

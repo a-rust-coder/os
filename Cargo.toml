@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-filesystem = { path = "./libs/filesystem/", features = ["std"]}
+partfs = { path = "./libs/partfs/", features = ["std"]}
 
 [workspace]
-members = ["libs/filesystem", "libs/mutex"]
+members = ["libs/partfs", "libs/mutex"]
