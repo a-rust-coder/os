@@ -1,7 +1,7 @@
 use std::{fs::remove_file, path::PathBuf};
 
 use partfs::{
-    DiskFile, Permissions, SectorSize,
+    Disk, DiskFile, Permissions, SectorSize,
     partition_tables::mbr::{generic_mbr::GenericMbr, partition_types},
 };
 
@@ -27,4 +27,18 @@ fn main() {
         .unwrap();
 
     mbr.write().unwrap();
+
+    drop(mbr);
+
+    let disk = DiskFile::from_file(
+        "target/disk.img".into(),
+        SectorSize::AllOf(&[512]),
+        Permissions::read_write(),
+    )
+    .unwrap();
+
+    let mbr = GenericMbr::read_from_disk(Box::new(disk), None).unwrap().unwrap();
+
+    println!("{:?}", mbr.partition_infos(0).unwrap());
+    println!("{:?}", mbr.partition_infos(1).unwrap());
 }
