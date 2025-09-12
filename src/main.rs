@@ -1,44 +1,99 @@
-use std::{fs::remove_file, path::PathBuf};
-
 use partfs::{
     Disk, DiskFile, Permissions, SectorSize,
+    filesystems::fat::bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, ExtendedBpb32, FatType},
     partition_tables::mbr::{generic_mbr::GenericMbr, partition_types},
 };
+use std::{fs::remove_file, path::PathBuf};
 
 fn main() {
-    let _ = remove_file("target/disk.img");
+    let create = false;
 
-    let disk = DiskFile::new(
+    if create {
+        let _ = remove_file("target/disk.img");
+
+        let disk = DiskFile::new(
+            PathBuf::from("target/disk.img"),
+            1024 * 1024 * 1024,
+            SectorSize::AllOf(&[512]),
+            Permissions::read_write(),
+        )
+        .unwrap();
+
+        let mut mbr = GenericMbr::new(Box::new(disk), None).unwrap();
+
+        mbr.create_partition(0, 1, 1024 * 1024 / 512, partition_types::FAT12_PRIMARY)
+            .unwrap();
+        mbr.create_partition(
+            1,
+            (1024 * 1024 / 512) + 1,
+            100 * 1024 * 1024 / 512,
+            partition_types::FAT16_PRIMARY,
+        )
+        .unwrap();
+        mbr.create_partition(
+            2,
+            (1024 * 1024 / 512) + (100 * 1024 * 1024 / 512) + 1,
+            800 * 1024 * 1024 / 512,
+            partition_types::FAT32_LBA,
+        )
+        .unwrap();
+
+        mbr.write().unwrap();
+
+        return;
+    }
+
+    let disk = DiskFile::from_file(
         PathBuf::from("target/disk.img"),
-        1024 * 1024,
         SectorSize::AllOf(&[512]),
         Permissions {
             read: true,
-            write: true,
+            write: false,
         },
     )
     .unwrap();
 
-    let mut mbr = GenericMbr::new(Box::new(disk), None).unwrap();
-
-    mbr.create_partition(0, 1, 1024, partition_types::EMPTY)
+    let mbr = GenericMbr::read_from_disk(Box::new(disk), None)
+        .unwrap()
         .unwrap();
-    mbr.create_partition(1, 1025, 1022, partition_types::EXFAT)
-        .unwrap();
+    let part1 = mbr.get_partition(0, Permissions::read_only()).unwrap();
+    let part2 = mbr.get_partition(1, Permissions::read_only()).unwrap();
+    let part3 = mbr.get_partition(2, Permissions::read_only()).unwrap();
 
-    mbr.write().unwrap();
+    for (i, part) in [part1, part2, part3].iter().enumerate() {
+        println!("\nPartition number {}\n==================\n", i);
 
-    drop(mbr);
+        let mut bpb = [0; 512];
+        part.read_sector(0, &mut bpb).unwrap();
 
-    let disk = DiskFile::from_file(
-        "target/disk.img".into(),
-        SectorSize::AllOf(&[512]),
-        Permissions::read_write(),
-    )
-    .unwrap();
+        let mut bpb_common = [0; 36];
+        bpb_common.copy_from_slice(&bpb[0..36]);
+        let bpb_common = BiosParameterBlockCommon::from(bpb_common);
 
-    let mbr = GenericMbr::read_from_disk(Box::new(disk), None).unwrap().unwrap();
+        let mut ext_bpb = [0; 476];
+        ext_bpb.copy_from_slice(&bpb[36..]);
 
-    println!("{:?}", mbr.partition_infos(0).unwrap());
-    println!("{:?}", mbr.partition_infos(1).unwrap());
+        println!(
+            "Bios Parameter Block Common is valid: {}",
+            bpb_common.is_valid()
+        );
+
+        let fat_type = bpb_common.detect_fat_type().unwrap();
+        println!("Detected FAT type: {:?}", fat_type);
+
+        match fat_type {
+            FatType::Fat12 => {
+                let ext_bpb = ExtendedBpb12_16::from(ext_bpb);
+                println!("FAT12 Extended BPB is valid: {}", ext_bpb.is_valid());
+            }
+            FatType::Fat16 => {
+                let ext_bpb = ExtendedBpb12_16::from(ext_bpb);
+                println!("FAT16 Extended BPB is valid: {}", ext_bpb.is_valid());
+            }
+            FatType::Fat32 => {
+                let ext_bpb = ExtendedBpb32::from(ext_bpb);
+                println!("FAT32 Extended BPB is valid: {}", ext_bpb.is_valid());
+            }
+        }
+    }
 }

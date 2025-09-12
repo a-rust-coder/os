@@ -44,7 +44,7 @@
               ))
             ];
 
-            shellHook = "nu";
+            shellHook = "exec nu";
           };
       }
     );
