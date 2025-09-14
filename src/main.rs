@@ -1,7 +1,5 @@
 use partfs::{
-    Disk, DiskFile, Permissions, SectorSize,
-    filesystems::fat::bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, ExtendedBpb32, FatType},
-    partition_tables::mbr::{generic_mbr::GenericMbr, partition_types},
+    filesystems::fat::{bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, ExtendedBpb32, FatType}, fat12::Fat12}, partition_tables::mbr::{generic_mbr::GenericMbr, partition_types}, Disk, DiskFile, Permissions, SectorSize
 };
 use std::{fs::remove_file, path::PathBuf};
 
@@ -48,17 +46,25 @@ fn main() {
         SectorSize::AllOf(&[512]),
         Permissions {
             read: true,
-            write: false,
+            write: true,
         },
     )
     .unwrap();
 
-    let mbr = GenericMbr::read_from_disk(Box::new(disk), None)
+    let mut mbr = GenericMbr::read_from_disk(Box::new(disk), None)
         .unwrap()
         .unwrap();
-    let part1 = mbr.get_partition(0, Permissions::read_only()).unwrap();
+
+    let part1 = mbr.get_partition(0, Permissions::read_write()).unwrap();
     let part2 = mbr.get_partition(1, Permissions::read_only()).unwrap();
     let part3 = mbr.get_partition(2, Permissions::read_only()).unwrap();
+
+
+    let fat12 = Fat12::new(Box::new(part1), 2, 1, 512).unwrap();
+    fat12.write().unwrap();
+    drop(fat12);
+
+    let part1 = mbr.get_partition(0, Permissions::read_only()).unwrap();
 
     for (i, part) in [part1, part2, part3].iter().enumerate() {
         println!("\nPartition number {}\n==================\n", i);
@@ -77,6 +83,8 @@ fn main() {
             "Bios Parameter Block Common is valid: {}",
             bpb_common.is_valid()
         );
+
+        println!("{:?}", bpb_common);
 
         let fat_type = bpb_common.detect_fat_type().unwrap();
         println!("Detected FAT type: {:?}", fat_type);

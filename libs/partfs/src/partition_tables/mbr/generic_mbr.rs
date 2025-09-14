@@ -168,4 +168,8 @@ impl GenericMbr {
             ),
         }
     }
+
+    pub fn set_boot_code(&mut self, boot_code: [u8; 446]) {
+        self.raw.bootstrap = boot_code
+    }
 }
