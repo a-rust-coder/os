@@ -59,6 +59,7 @@ pub struct Fat12 {
     raw: Fat12Raw,
     disk: Box<dyn Disk>,
     sector_size: usize,
+    clusters_count: usize,
 }
 
 impl Fat12 {
@@ -73,10 +74,19 @@ impl Fat12 {
             Some(v) => v,
         };
 
+        let clusters_count = (((raw.bpb.total_sectors_16 as usize)
+            | (raw.bpb.total_sectors_32 as usize))
+            - ((raw.bpb.reserved_sectors_count as usize)
+                + (raw.bpb.number_of_fats as usize) * (raw.bpb.fat_size_16 as usize)
+                + (((raw.bpb.root_directory_entries as usize) * 32 + (sector_size - 1))
+                    / sector_size)))
+            / sector_size;
+
         Ok(Some(Self {
             raw,
             disk,
             sector_size,
+            clusters_count,
         }))
     }
 
@@ -169,10 +179,18 @@ impl Fat12 {
             signature: 0xAA55,
         };
 
+        let clusters_count = (((bpb.total_sectors_16 as usize) | (bpb.total_sectors_32 as usize))
+            - ((bpb.reserved_sectors_count as usize)
+                + (bpb.number_of_fats as usize) * (bpb.fat_size_16 as usize)
+                + (((bpb.root_directory_entries as usize) * 32 + (sector_size - 1))
+                    / sector_size)))
+            / sector_size;
+
         let slf = Self {
             raw: Fat12Raw { bpb, extended_bpb },
             disk,
             sector_size,
+            clusters_count,
         };
         slf.write()?;
 
@@ -198,5 +216,75 @@ impl Fat12 {
 
     pub fn write(&self) -> Result<(), DiskErr> {
         self.raw.write_to_disk(&*self.disk)
+    }
+
+    pub fn get_fat_entry(&self, entry_index: usize) -> Result<u16, DiskErr> {
+        if entry_index > self.clusters_count {
+            return Err(DiskErr::IndexOutOfRange);
+        }
+
+        let sector_index = (self.raw.bpb.reserved_sectors_count as usize)
+            + (entry_index + entry_index / 2) / self.sector_size;
+        let offset = sector_index % self.sector_size;
+
+        let mut sector = vec![0; self.sector_size];
+        self.disk.read_sector(sector_index, &mut sector)?;
+
+        let entry = if self.sector_size - offset == 1 {
+            let mut sector2 = vec![0; self.sector_size];
+            self.disk.read_sector(sector_index + 1, &mut sector2)?;
+            u16::from_be_bytes([sector[offset], sector2[0]])
+        } else {
+            u16::from_be_bytes([sector[offset], sector[offset + 1]])
+        };
+
+        let entry = if entry_index & 1 == 1 {
+            entry >> 4
+        } else {
+            entry & 0xFFF
+        };
+
+        Ok(entry)
+    }
+
+    pub fn set_fat_entry(&self, entry_index: usize, value: u16) -> Result<(), DiskErr> {
+        if entry_index > self.clusters_count {
+            return Err(DiskErr::IndexOutOfRange);
+        }
+
+        let sector_index = (self.raw.bpb.reserved_sectors_count as usize)
+            + (entry_index + entry_index / 2) / self.sector_size;
+        let offset = sector_index % self.sector_size;
+
+        let mut fat_buf = vec![0; self.sector_size];
+        self.disk.read_sector(sector_index, &mut fat_buf)?;
+
+        if self.sector_size - offset == 1 {
+            let mut sector2 = vec![0; self.sector_size];
+            self.disk.read_sector(sector_index + 1, &mut sector2)?;
+            fat_buf.extend_from_slice(&sector2);
+        }
+
+        let entry_val = if entry_index & 1 == 1 {
+            fat_buf[entry_index + 1] &= 0xF;
+            value << 4
+        } else {
+            fat_buf[entry_index] &= 0xF0;
+            value & 0xFFF
+        };
+
+        let bytes = entry_val.to_be_bytes();
+
+        fat_buf[entry_index] |= bytes[0];
+        fat_buf[entry_index + 1] |= bytes[1];
+
+        self.disk
+            .write_sector(sector_index, &fat_buf[..self.sector_size])?;
+        if fat_buf.len() > self.sector_size {
+            self.disk
+                .write_sector(sector_index + 1, &fat_buf[self.sector_size..])?;
+        }
+
+        Ok(())
     }
 }

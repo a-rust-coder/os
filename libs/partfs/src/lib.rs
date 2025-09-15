@@ -85,6 +85,7 @@ pub enum DiskErr {
     UnsupportedDiskSectorSize,
     InvalidPartitionIndex,
     SpaceAlreadyInUse,
+    IndexOutOfRange
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
