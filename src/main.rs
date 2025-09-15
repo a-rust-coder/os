@@ -1,5 +1,10 @@
 use partfs::{
-    filesystems::fat::{bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, ExtendedBpb32, FatType}, fat12::Fat12}, partition_tables::mbr::{generic_mbr::GenericMbr, partition_types}, Disk, DiskFile, Permissions, SectorSize
+    Disk, DiskFile, Permissions, SectorSize,
+    filesystems::fat::{
+        bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, ExtendedBpb32, FatType},
+        fat12::Fat12,
+    },
+    partition_tables::mbr::{generic_mbr::GenericMbr, partition_types},
 };
 use std::{fs::remove_file, path::PathBuf};
 
@@ -51,14 +56,13 @@ fn main() {
     )
     .unwrap();
 
-    let mut mbr = GenericMbr::read_from_disk(Box::new(disk), None)
+    let mbr = GenericMbr::read_from_disk(Box::new(disk), None)
         .unwrap()
         .unwrap();
 
     let part1 = mbr.get_partition(0, Permissions::read_write()).unwrap();
     let part2 = mbr.get_partition(1, Permissions::read_only()).unwrap();
     let part3 = mbr.get_partition(2, Permissions::read_only()).unwrap();
-
 
     let fat12 = Fat12::new(Box::new(part1), 2, 1, 512).unwrap();
     fat12.write().unwrap();
