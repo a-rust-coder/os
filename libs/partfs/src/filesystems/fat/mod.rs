@@ -4,6 +4,7 @@ pub mod fat16;
 pub mod fat32;
 
 #[repr(C, packed)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DirEntry {
     name: [u8; 11],
     attributes: u8,
@@ -58,13 +59,13 @@ impl From<[u8; 32]> for DirEntry {
             write_time: u16::from_le_bytes([value[22], value[23]]),
             write_date: u16::from_le_bytes([value[24], value[25]]),
             first_cluster_low: u16::from_le_bytes([value[26], value[27]]),
-            file_size: u32::from_le_bytes([value[28], value[29], value[30], value[32]]),
+            file_size: u32::from_le_bytes([value[28], value[29], value[30], value[31]]),
         }
     }
 }
 
 impl DirEntry {
     pub fn cluster_value(&self) -> u32 {
-        (self.first_cluster_high as u32) | ((self.first_cluster_low as u32) << 16)
+        (self.first_cluster_low as u32) | ((self.first_cluster_high as u32) << 16)
     }
 }

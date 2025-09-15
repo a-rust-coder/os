@@ -1,6 +1,7 @@
 use partfs::{
     Disk, DiskFile, Permissions, SectorSize,
     filesystems::fat::{
+        DirEntry,
         bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, ExtendedBpb32, FatType},
         fat12::Fat12,
     },
@@ -60,12 +61,24 @@ fn main() {
         .unwrap()
         .unwrap();
 
-    let part1 = mbr.get_partition(0, Permissions::read_write()).unwrap();
+    let part1 = mbr.get_partition(0, Permissions::read_only()).unwrap();
     let part2 = mbr.get_partition(1, Permissions::read_only()).unwrap();
     let part3 = mbr.get_partition(2, Permissions::read_only()).unwrap();
 
-    let fat12 = Fat12::new(Box::new(part1), 2, 1, 512).unwrap();
-    fat12.write().unwrap();
+    let fat12 = Fat12::read_from_disk(Box::new(part1)).unwrap().unwrap();
+
+    let mut i = 0;
+    while let Ok(v) = fat12.get_fat_entry(i) {
+        i += 1;
+        println!("{}", v)
+    }
+
+    let mut i = 0;
+    while let Ok(v) = fat12.get_root_dir_entry(i) && i < 3 {
+        i += 1;
+        println!("{:?}", v)
+    }
+
     drop(fat12);
 
     let part1 = mbr.get_partition(0, Permissions::read_only()).unwrap();
