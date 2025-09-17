@@ -67,7 +67,7 @@ fn main() {
     let fat12 = Fat12::read_from_disk(Box::new(part1)).unwrap().unwrap();
 
     let mut i = 0;
-    while let Ok(v) = fat12.get_fat_entry(i) {
+    while let Ok(v) = fat12.get_fat_entry(i) && i < 10 {
         i += 1;
         println!("{}", v)
     }
