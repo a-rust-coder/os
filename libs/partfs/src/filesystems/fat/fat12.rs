@@ -1,11 +1,12 @@
 use crate::{
-    Disk, DiskErr,
+    Disk, DiskErr, Permissions,
     filesystems::fat::{
         DirEntry,
         bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, FatType},
     },
+    wrappers::{DiskWrapper, FragmentedSubDisk},
 };
-use alloc::{boxed::Box, vec, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
 
 pub struct Fat12Raw {
     bpb: BiosParameterBlockCommon,
@@ -60,7 +61,7 @@ impl Fat12Raw {
 
 pub struct Fat12 {
     raw: Fat12Raw,
-    disk: Box<dyn Disk>,
+    disk: Arc<DiskWrapper>,
     sector_size: usize,
     clusters_count: usize,
 }
@@ -87,7 +88,7 @@ impl Fat12 {
 
         Ok(Some(Self {
             raw,
-            disk,
+            disk: DiskWrapper::new(disk),
             sector_size,
             clusters_count,
         }))
@@ -191,7 +192,7 @@ impl Fat12 {
 
         let slf = Self {
             raw: Fat12Raw { bpb, extended_bpb },
-            disk,
+            disk: DiskWrapper::new(disk),
             sector_size,
             clusters_count,
         };
@@ -400,5 +401,46 @@ impl Fat12 {
             current_fat_entry += 1;
         }
         Ok(None)
+    }
+
+    pub fn get_file(
+        &self,
+        mut fat_entry: usize,
+        permissions: Permissions,
+    ) -> Result<(usize, FragmentedSubDisk), DiskErr> {
+        let mut clusters = vec![fat_entry];
+
+        loop {
+            fat_entry = self.get_fat_entry(fat_entry)? as usize;
+            clusters.push(fat_entry);
+            if fat_entry == 0xFFF {
+                break;
+            }
+        }
+
+        let mut parts = Vec::with_capacity(clusters.len());
+
+        let first_cluster_sector = (self.raw.bpb.reserved_sectors_count as usize)
+            + (self.raw.bpb.number_of_fats as usize) * (self.raw.bpb.fat_size_16 as usize)
+            + ((self.raw.bpb.root_directory_entries as usize) * 32 + self.sector_size - 1)
+                / self.sector_size;
+        for i in clusters {
+            let start = (first_cluster_sector + i * self.raw.bpb.sectors_per_cluster as usize)
+                * self.sector_size;
+            let end = start + (self.raw.bpb.sectors_per_cluster as usize) * self.sector_size;
+
+            if parts.len() == 0 {
+                parts.push((start, end));
+            } else {
+                let idx = parts.len() - 1;
+                let last = parts[idx];
+                if last.1 == start {
+                    parts[idx] = (last.0, end)
+                }
+            }
+        }
+
+        let subdisk = self.disk.fragmented_subdisk(parts, permissions)?;
+        Ok((subdisk.disk_infos()?.disk_size, subdisk))
     }
 }

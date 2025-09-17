@@ -100,6 +100,71 @@ impl DiskWrapper {
             permissions,
         })
     }
+
+    pub fn fragmented_subdisk(
+        &self,
+        parts: Vec<(usize, usize)>,
+        permissions: Permissions,
+    ) -> Result<FragmentedSubDisk, DiskErr> {
+        let mut w_borrows = self.w_borrows.lock();
+        let mut r_borrows = self.r_borrows.lock();
+        let disk_size = self.disk_infos()?.disk_size;
+
+        let mut size = 0;
+
+        for &(start, end) in &parts {
+            if start > end || end > disk_size {
+                return Err(DiskErr::InvalidDiskSize);
+            }
+
+            if permissions.read {
+                if (|| {
+                    for i in r_borrows.clone() {
+                        if (i.0 <= start && start < i.1) || (i.0 < end && end <= i.1) {
+                            return true;
+                        }
+                    }
+                    false
+                })() {
+                    return Err(DiskErr::SpaceAlreadyInUse);
+                }
+            }
+
+            if permissions.write {
+                if (|| {
+                    for i in w_borrows.clone() {
+                        if (i.0 <= start && start < i.1) || (i.0 < end && end <= i.1) {
+                            return true;
+                        }
+                    }
+                    false
+                })() {
+                    return Err(DiskErr::SpaceAlreadyInUse);
+                }
+            }
+
+            size += end - start;
+        }
+
+        if permissions.read {
+            r_borrows.extend_from_slice(&parts);
+        }
+
+        if permissions.write {
+            w_borrows.extend_from_slice(&parts);
+        }
+
+        let sector_size = self.disk_infos()?.sector_size;
+        let parent = self.weak_self.lock().clone();
+
+        Ok(FragmentedSubDisk {
+            parent,
+            parts,
+            size,
+            sector_size,
+            permissions,
+        })
+    }
 }
 
 impl Disk for DiskWrapper {
