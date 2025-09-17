@@ -1,13 +1,12 @@
 use partfs::{
     Disk, DiskFile, Permissions, SectorSize,
     filesystems::fat::{
-        DirEntry,
         bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, ExtendedBpb32, FatType},
         fat12::Fat12,
     },
     partition_tables::mbr::{generic_mbr::GenericMbr, partition_types},
 };
-use std::{fs::remove_file, path::PathBuf};
+use std::{fs::remove_file, path::PathBuf, vec};
 
 fn main() {
     let create = false;
@@ -18,7 +17,7 @@ fn main() {
         let disk = DiskFile::new(
             PathBuf::from("target/disk.img"),
             1024 * 1024 * 1024,
-            SectorSize::AllOf(&[512]),
+            SectorSize::AllOf(vec![512]),
             Permissions::read_write(),
         )
         .unwrap();
@@ -49,7 +48,7 @@ fn main() {
 
     let disk = DiskFile::from_file(
         PathBuf::from("target/disk.img"),
-        SectorSize::AllOf(&[512]),
+        SectorSize::AllOf(vec![512]),
         Permissions {
             read: true,
             write: true,
@@ -74,7 +73,9 @@ fn main() {
     }
 
     let mut i = 0;
-    while let Ok(v) = fat12.get_root_dir_entry(i) && i < 3 {
+    while let Ok(v) = fat12.get_root_dir_entry(i)
+        && i < 3
+    {
         i += 1;
         println!("{:?}", v)
     }
