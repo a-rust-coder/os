@@ -349,7 +349,6 @@ impl Fat12 {
         Ok(())
     }
 
-    /// TODO:
     pub fn find_free_clusters(&self, size: usize) -> Result<Option<Vec<usize>>, DiskErr> {
         if size >= self.clusters_count {
             return Ok(None);
@@ -360,31 +359,46 @@ impl Fat12 {
         let mut current_fat_entry = 2;
         let mut current_sector_index = self.raw.bpb.reserved_sectors_count as usize;
         let mut buffer = vec![0; self.sector_size * 2];
+        let mut tmp_buf = vec![0; self.sector_size];
 
         self.disk
             .read_sector(current_sector_index, &mut buffer[..self.sector_size])?;
-        if (self.raw.bpb.fat_size_16 as usize) - current_sector_index - 1 > 0 {
+        if (self.raw.bpb.fat_size_16 as usize) - current_sector_index > 1 {
             self.disk
                 .read_sector(current_sector_index + 1, &mut buffer[self.sector_size..])?;
         }
 
         while current_fat_entry < self.clusters_count {
-            if current_fat_entry >= self.clusters_count {
-                return Ok(None);
+            let offset = (current_fat_entry + current_fat_entry / 2) % self.sector_size;
+            let entry_value = u16::from_le_bytes([buffer[offset], buffer[offset + 1]]);
+
+            let entry_value = if current_fat_entry % 2 == 1 {
+                entry_value >> 4
+            } else {
+                entry_value & 0xFFF
+            };
+
+            if entry_value == 0 {
+                free_clusters.push(current_fat_entry);
+                if free_clusters.len() == size {
+                    return Ok(Some(free_clusters));
+                }
             }
 
-            let offset = current_fat_entry + current_fat_entry / 2;
-            let entry_value = u16::from_be_bytes([buffer[offset], buffer[offset + 1]]);
+            if self.sector_size - offset < 2 {
+                current_sector_index += 1;
 
-            if current_fat_entry % 2 == 1 {}
+                tmp_buf.copy_from_slice(&buffer[self.sector_size..]);
+                buffer[..self.sector_size].copy_from_slice(&tmp_buf);
+
+                if (self.raw.bpb.fat_size_16 as usize) - current_sector_index > 1 {
+                    self.disk
+                        .read_sector(current_sector_index + 1, &mut buffer[self.sector_size..])?;
+                }
+            }
 
             current_fat_entry += 1;
         }
-
-        if free_clusters.len() == size {
-            Ok(Some(free_clusters))
-        } else {
-            Ok(None)
-        }
+        Ok(None)
     }
 }

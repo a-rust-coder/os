@@ -79,6 +79,8 @@ fn main() {
         println!("{:?}", v)
     }
 
+    println!("{:?}", fat12.find_free_clusters(10).unwrap());
+
     drop(fat12);
 
     let part1 = mbr.get_partition(0, Permissions::read_only()).unwrap();
