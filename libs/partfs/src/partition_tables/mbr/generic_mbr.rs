@@ -1,7 +1,7 @@
 use crate::{
     Disk, DiskErr, Permissions,
     partition_tables::mbr::{MbrEntry, PartitionInfos, PartitionType, RawMbr},
-    wrappers::{DiskWrapper, SubDisk},
+    wrappers::{SubDisk, DiskWrapper},
 };
 use alloc::{boxed::Box, sync::Arc};
 

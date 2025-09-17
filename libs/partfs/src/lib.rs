@@ -2,11 +2,11 @@
 
 extern crate alloc;
 
+use alloc::vec::Vec;
+
 /// Procides an implementation of the `Disk` trait for `std::fs`
 #[cfg(feature = "std")]
 pub mod std_helpers;
-
-use core::fmt::Debug;
 
 #[cfg(feature = "std")]
 pub use std_helpers::*;
@@ -85,10 +85,10 @@ pub enum DiskErr {
     UnsupportedDiskSectorSize,
     InvalidPartitionIndex,
     SpaceAlreadyInUse,
-    IndexOutOfRange
+    IndexOutOfRange,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiskInfos {
     pub sector_size: SectorSize,
     /// The disk size in bytes
@@ -99,20 +99,20 @@ pub struct DiskInfos {
 
 /// Informs the supported sector sizes. A sector size superior to the disk size is always invalid
 /// and should trigger an error `DiskErr::InvalidSectorSize`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SectorSize {
     /// All sector sizes are supported
     Any,
 
     /// All sector sizes in the list are supported
-    AllOf(&'static [usize]),
+    AllOf(Vec<usize>),
     /// All sector sizes are supported expected the ones in the list
-    AnyExcept(&'static [usize]),
+    AnyExcept(Vec<usize>),
 
     /// All sector sizes in one of the ranges are supported. min <= size < max
-    InRanges(&'static [(usize, usize)]),
+    InRanges(Vec<(usize, usize)>),
     /// All sector sizes are supported expected the ones in one of these ranges. min <= size < max
-    AnyExceptRanges(&'static [(usize, usize)]),
+    AnyExceptRanges(Vec<(usize, usize)>),
 }
 
 /// These permissions are only intented for disk usage, **not** for filesystems. They only are a
@@ -170,7 +170,7 @@ impl SectorSize {
             Self::Any => Some(sector_size),
             Self::AllOf(l) => {
                 let mut min = None;
-                for &i in *l {
+                for &i in l {
                     if i == sector_size {
                         min = Some(sector_size);
                         break;
@@ -202,7 +202,7 @@ impl SectorSize {
             Self::InRanges(ranges) => {
                 let mut min = None;
 
-                for &(start, end) in *ranges {
+                for &(start, end) in ranges {
                     if end <= sector_size {
                         continue;
                     }
@@ -227,7 +227,7 @@ impl SectorSize {
                     let mut inside = false;
                     let mut bump_to = min + 1;
 
-                    for &(start, end) in *ranges {
+                    for &(start, end) in ranges {
                         if start <= min && min < end {
                             inside = true;
                             bump_to = bump_to.max(end);

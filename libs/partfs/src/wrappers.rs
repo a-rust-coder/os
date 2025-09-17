@@ -171,7 +171,7 @@ impl Disk for SubDisk {
         {
             return Err(DiskErr::InvalidSectorSize {
                 found: sector_size,
-                supported: self.sector_size,
+                supported: self.sector_size.clone(),
                 start: self.start,
             });
         }
@@ -219,7 +219,7 @@ impl Disk for SubDisk {
         {
             return Err(DiskErr::InvalidSectorSize {
                 found: sector_size,
-                supported: self.sector_size,
+                supported: self.sector_size.clone(),
                 start: self.start,
             });
         }
@@ -242,7 +242,7 @@ impl Disk for SubDisk {
 
     fn disk_infos(&self) -> Result<DiskInfos, DiskErr> {
         Ok(DiskInfos {
-            sector_size: self.sector_size,
+            sector_size: self.sector_size.clone(),
             disk_size: self.end - self.start,
             permissions: self.permissions,
         })
@@ -270,6 +270,170 @@ impl Drop for SubDisk {
                     .position(|&x| x == (self.start, self.end))
                     .unwrap();
                 w_borrows.swap_remove(idx);
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FragmentedSubDisk {
+    parent: Weak<DiskWrapper>,
+    /// In sectors
+    parts: Vec<(usize, usize)>,
+    size: usize,
+    sector_size: SectorSize,
+    permissions: Permissions,
+}
+
+impl Disk for FragmentedSubDisk {
+    fn read_sector(&self, sector: usize, buf: &mut [u8]) -> Result<(), DiskErr> {
+        // ### GETS THE PARENT ###
+
+        let parent = match self.parent.upgrade() {
+            Some(v) => v,
+            None => return Err(DiskErr::UnreachableDisk),
+        };
+
+        // ### CHECKS THE PERMISSIONS ###
+
+        if !self.permissions.read {
+            return Err(DiskErr::InvalidPermission {
+                disk_permissions: self.permissions,
+            });
+        }
+
+        if self.parts.len() == 0 {
+            return Err(DiskErr::InvalidSectorIndex {
+                found: sector,
+                max: 0,
+            });
+        }
+
+        // ### VERIFIES THE SECTOR SIZE ###
+
+        let sector_size = buf.len();
+
+        if !self.sector_size.is_supported(sector_size, self.size) {
+            return Err(DiskErr::InvalidSectorSize {
+                found: sector_size,
+                supported: self.sector_size.clone(),
+                start: self.parts[0].0,
+            });
+        }
+
+        let mut offset = 0;
+        let mut current_sector = 0;
+
+        for &(start, end) in &self.parts {
+            let size = end - start;
+            if size % sector_size != 0 || start % sector_size != 0 {
+                return Err(DiskErr::InvalidSectorSize {
+                    found: sector_size,
+                    supported: self.sector_size.clone(),
+                    start: self.parts[0].0,
+                });
+            }
+
+            if current_sector + size / sector_size > sector {
+                offset = start + (current_sector - sector) * sector_size;
+                break;
+            }
+
+            current_sector += size / sector_size;
+        }
+
+        parent.disk.read_sector(offset / sector, buf)
+    }
+
+    fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
+        // ### GETS THE PARENT ###
+
+        let parent = match self.parent.upgrade() {
+            Some(v) => v,
+            None => return Err(DiskErr::UnreachableDisk),
+        };
+
+        // ### CHECKS THE PERMISSIONS ###
+
+        if !self.permissions.write {
+            return Err(DiskErr::InvalidPermission {
+                disk_permissions: self.permissions,
+            });
+        }
+
+        if self.parts.len() == 0 {
+            return Err(DiskErr::InvalidSectorIndex {
+                found: sector,
+                max: 0,
+            });
+        }
+
+        // ### VERIFIES THE SECTOR SIZE ###
+
+        let sector_size = buf.len();
+
+        if !self.sector_size.is_supported(sector_size, self.size) {
+            return Err(DiskErr::InvalidSectorSize {
+                found: sector_size,
+                supported: self.sector_size.clone(),
+                start: self.parts[0].0,
+            });
+        }
+
+        let mut offset = 0;
+        let mut current_sector = 0;
+
+        for &(start, end) in &self.parts {
+            let size = end - start;
+            if size % sector_size != 0 || start % sector_size != 0 {
+                return Err(DiskErr::InvalidSectorSize {
+                    found: sector_size,
+                    supported: self.sector_size.clone(),
+                    start: self.parts[0].0,
+                });
+            }
+
+            if current_sector + size / sector_size > sector {
+                offset = start + (current_sector - sector) * sector_size;
+                break;
+            }
+
+            current_sector += size / sector_size;
+        }
+
+        parent.disk.write_sector(offset / sector, buf)
+    }
+
+    fn disk_infos(&self) -> Result<DiskInfos, DiskErr> {
+        Ok(DiskInfos {
+            sector_size: self.sector_size.clone(),
+            disk_size: self.size,
+            permissions: self.permissions,
+        })
+    }
+}
+
+impl Drop for FragmentedSubDisk {
+    fn drop(&mut self) {
+        // Gets the parent. If the parent has been dropped, no need to do nothing.
+        if let Some(parent) = self.parent.upgrade() {
+            // Remove the subdisk range from the read borrows if needed
+            if self.permissions.read {
+                let mut r_borrows = parent.r_borrows.lock();
+
+                for &(start, end) in &self.parts {
+                    let idx = r_borrows.iter().position(|&x| x == (start, end)).unwrap();
+                    r_borrows.swap_remove(idx);
+                }
+            }
+            // Remove the subdisk range from the write borrows if needed
+            if self.permissions.write {
+                let mut w_borrows = parent.w_borrows.lock();
+
+                for &(start, end) in &self.parts {
+                    let idx = w_borrows.iter().position(|&x| x == (start, end)).unwrap();
+                    w_borrows.swap_remove(idx);
+                }
             }
         }
     }

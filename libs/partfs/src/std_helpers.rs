@@ -32,7 +32,7 @@ impl Disk for DiskFile {
         if !self.sector_size.is_supported(sector_size, self.size) {
             return Err(DiskErr::InvalidSectorSize {
                 found: sector_size,
-                supported: self.sector_size,
+                supported: self.sector_size.clone(),
                 start: 0,
             });
         }
@@ -73,7 +73,7 @@ impl Disk for DiskFile {
         if !self.sector_size.is_supported(sector_size, self.size) {
             return Err(DiskErr::InvalidSectorSize {
                 found: sector_size,
-                supported: self.sector_size,
+                supported: self.sector_size.clone(),
                 start: 0,
             });
         }
@@ -102,7 +102,7 @@ impl Disk for DiskFile {
 
     fn disk_infos(&self) -> Result<DiskInfos, DiskErr> {
         Ok(DiskInfos {
-            sector_size: self.sector_size,
+            sector_size: self.sector_size.clone(),
             disk_size: self.size,
             permissions: self.permissions,
         })
