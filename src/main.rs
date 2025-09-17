@@ -6,7 +6,7 @@ use partfs::{
     },
     partition_tables::mbr::{generic_mbr::GenericMbr, partition_types},
 };
-use std::{fs::remove_file, path::PathBuf, vec};
+use std::{fs::remove_file, path::PathBuf, u16, vec};
 
 fn main() {
     let create = false;
@@ -60,14 +60,16 @@ fn main() {
         .unwrap()
         .unwrap();
 
-    let part1 = mbr.get_partition(0, Permissions::read_only()).unwrap();
+    let part1 = mbr.get_partition(0, Permissions::read_write()).unwrap();
     let part2 = mbr.get_partition(1, Permissions::read_only()).unwrap();
     let part3 = mbr.get_partition(2, Permissions::read_only()).unwrap();
 
     let fat12 = Fat12::read_from_disk(Box::new(part1)).unwrap().unwrap();
 
     let mut i = 0;
-    while let Ok(v) = fat12.get_fat_entry(i) && i < 10 {
+    while let Ok(v) = fat12.get_fat_entry(i)
+        && i < 10
+    {
         i += 1;
         println!("{}", v)
     }
@@ -77,7 +79,21 @@ fn main() {
         && i < 3
     {
         i += 1;
-        println!("{:?}", v)
+        println!("{:?}", v);
+
+        let cluster = v.cluster_value();
+
+        if cluster > 0 && cluster < u16::MAX as usize {
+            let (size, file) = fat12.get_file(cluster, Permissions::read_write()).unwrap();
+            let mut sector = [0; 512];
+
+            for i in 0..(size + 511) / 512 {
+                file.read_sector(i, &mut sector).unwrap();
+                println!("{}", unsafe {
+                    String::from_utf8_unchecked(sector.to_vec())
+                });
+            }
+        }
     }
 
     println!("{:?}", fat12.find_free_clusters(10).unwrap());

@@ -350,6 +350,7 @@ impl Fat12 {
         Ok(())
     }
 
+    /// This returns the FAT entry index. -2 to get the cluster address
     pub fn find_free_clusters(&self, size: usize) -> Result<Option<Vec<usize>>, DiskErr> {
         if size >= self.clusters_count {
             return Ok(None);
@@ -408,13 +409,16 @@ impl Fat12 {
         mut fat_entry: usize,
         permissions: Permissions,
     ) -> Result<(usize, FragmentedSubDisk), DiskErr> {
-        let mut clusters = vec![fat_entry];
+        let mut clusters = vec![fat_entry - 2];
 
         loop {
             fat_entry = self.get_fat_entry(fat_entry)? as usize;
-            clusters.push(fat_entry);
+            clusters.push(fat_entry - 2);
             if fat_entry == 0xFFF {
                 break;
+            }
+            if fat_entry == 0 {
+                return Err(DiskErr::IOErr);
             }
         }
 

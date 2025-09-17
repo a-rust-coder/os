@@ -400,14 +400,15 @@ impl Disk for FragmentedSubDisk {
             }
 
             if current_sector + size / sector_size > sector {
-                offset = start + (current_sector - sector) * sector_size;
+                offset = start + (sector - current_sector) * sector_size;
                 break;
             }
 
             current_sector += size / sector_size;
         }
 
-        parent.disk.read_sector(offset / sector, buf)
+        println!("{}", offset/sector_size);
+        parent.disk.read_sector(offset / sector_size, buf)
     }
 
     fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
@@ -459,14 +460,14 @@ impl Disk for FragmentedSubDisk {
             }
 
             if current_sector + size / sector_size > sector {
-                offset = start + (current_sector - sector) * sector_size;
+                offset = start + (sector - current_sector) * sector_size;
                 break;
             }
 
             current_sector += size / sector_size;
         }
 
-        parent.disk.write_sector(offset / sector, buf)
+        parent.disk.write_sector(offset / sector_size, buf)
     }
 
     fn disk_infos(&self) -> Result<DiskInfos, DiskErr> {

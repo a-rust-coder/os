@@ -65,7 +65,7 @@ impl From<[u8; 32]> for DirEntry {
 }
 
 impl DirEntry {
-    pub fn cluster_value(&self) -> u32 {
-        (self.first_cluster_low as u32) | ((self.first_cluster_high as u32) << 16)
+    pub fn cluster_value(&self) -> usize {
+        (self.first_cluster_low as usize) | ((self.first_cluster_high as usize) << 16)
     }
 }
