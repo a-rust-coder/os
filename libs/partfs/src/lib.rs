@@ -13,6 +13,7 @@ pub use std_helpers::*;
 
 pub mod filesystems;
 pub mod partition_tables;
+pub mod memdisk;
 /// Procides disk wrappers to allow subdisk creation. `SubDisk`s are useful when working with
 /// partitions or filesystems for example.
 pub mod wrappers;

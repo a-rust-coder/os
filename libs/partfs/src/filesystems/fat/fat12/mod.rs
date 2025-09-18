@@ -1,7 +1,7 @@
 use crate::{
     Disk, DiskErr, Permissions,
     filesystems::fat::{
-        DirEntry,
+        dir_entry::DirEntry,
         bpb::{BiosParameterBlockCommon, ExtendedBpb12_16, FatType},
     },
     wrappers::{DiskWrapper, FragmentedSubDisk},

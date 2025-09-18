@@ -407,7 +407,6 @@ impl Disk for FragmentedSubDisk {
             current_sector += size / sector_size;
         }
 
-        println!("{}", offset/sector_size);
         parent.disk.read_sector(offset / sector_size, buf)
     }
 
