@@ -87,6 +87,7 @@ pub enum DiskErr {
     InvalidPartitionIndex,
     SpaceAlreadyInUse,
     IndexOutOfRange,
+    InvalidPathFormat,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
