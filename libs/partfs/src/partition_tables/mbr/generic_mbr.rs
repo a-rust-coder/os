@@ -1,7 +1,7 @@
 use crate::{
     Disk, DiskErr, Permissions,
     partition_tables::mbr::{MbrEntry, PartitionInfos, PartitionType, RawMbr},
-    wrappers::{SubDisk, DiskWrapper},
+    wrappers::{DiskWrapper, SubDisk},
 };
 use alloc::{boxed::Box, sync::Arc};
 
@@ -18,7 +18,7 @@ pub struct GenericMbr {
 
 impl GenericMbr {
     /// This function creates a new MBR structure in memory (without writing it to the disk)
-    pub fn new(disk: Box<dyn Disk>, sector_size: Option<usize>) -> Result<Self, DiskErr> {
+    pub fn new<T: Disk + 'static>(disk: T, sector_size: Option<usize>) -> Result<Self, DiskErr> {
         let sector_size = match sector_size {
             None => match disk.disk_infos()?.sector_size.minimal_ge(512) {
                 None => return Err(DiskErr::UnsupportedDiskSectorSize),
@@ -39,8 +39,8 @@ impl GenericMbr {
     }
 
     /// Reads a MBR from the given disk.
-    pub fn read_from_disk(
-        disk: Box<dyn Disk>,
+    pub fn read_from_disk<T: Disk + 'static>(
+        disk: T,
         sector_size: Option<usize>,
     ) -> Result<Option<Self>, DiskErr> {
         let sector_size = match sector_size {
@@ -51,7 +51,7 @@ impl GenericMbr {
             Some(v) => v,
         };
 
-        let raw = RawMbr::read_from_disk(&*disk)?;
+        let raw = RawMbr::read_from_disk(&disk)?;
         if raw.signature == 0xAA55 {
             Ok(Some(Self {
                 raw,

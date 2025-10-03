@@ -21,9 +21,9 @@ pub struct DiskWrapper {
 
 impl DiskWrapper {
     /// Creates a new wrapper from a disk
-    pub fn new(disk: Box<dyn Disk>) -> Arc<Self> {
+    pub fn new<T: Disk + 'static>(disk: T) -> Arc<Self> {
         let slf = Arc::new(Self {
-            disk,
+            disk: Box::new(disk),
             r_borrows: Mutex::new(Vec::new()),
             w_borrows: Mutex::new(Vec::new()),
             weak_self: Mutex::new(Weak::new()),

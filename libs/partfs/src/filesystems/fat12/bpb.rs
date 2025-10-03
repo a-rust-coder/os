@@ -140,4 +140,31 @@ impl BiosParameterBlock {
             signature: u16::from_le_bytes([bytes[510], bytes[511]]),
         }
     }
+
+    pub const fn is_valid(&self) -> bool {
+        self.bytes_per_sector >= 512
+            && self.bytes_per_sector.count_ones() == 1
+            && self.sectors_per_cluster.count_ones() == 1
+            && self.reserved_sectors_count != 0
+            && self.number_of_fats != 0
+            && ((self.root_entries_count as usize) * 32) % (self.bytes_per_sector as usize) == 0
+            && ((self.total_sectors_16 != 0 && self.total_sectors_32 == 0)
+                || (self.total_sectors_32 > 0x10000 && self.total_sectors_16 == 0))
+            && self.media & 0xF0 == 0xF0
+            && self.drive_number & !0x80 == 0
+            && self._reserved0 == 0
+            && self.fs_type[0] == 0x46
+            && self.fs_type[1] == 0x41
+            && self.fs_type[2] == 0x54
+            && (self.fs_type[3] == 0x20 || self.fs_type[3] == 0x31)
+            && (self.fs_type[4] == 0x20 || self.fs_type[4] == 0x32)
+            && self.fs_type[5] == 0x20
+            && self.fs_type[6] == 0x20
+            && self.fs_type[7] == 0x20
+            && self.signature == 0xAA55
+    }
+
+    pub const fn bytes_per_sector(&self) -> usize {
+        self.bytes_per_sector as usize
+    }
 }
