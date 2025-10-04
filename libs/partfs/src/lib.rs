@@ -12,8 +12,8 @@ pub mod std_helpers;
 pub use std_helpers::*;
 
 pub mod filesystems;
-pub mod partition_tables;
 pub mod memdisk;
+pub mod partition_tables;
 /// Procides disk wrappers to allow subdisk creation. `SubDisk`s are useful when working with
 /// partitions or filesystems for example.
 pub mod wrappers;
@@ -178,10 +178,8 @@ impl SectorSize {
                         break;
                     }
 
-                    if i > sector_size {
-                        if min.map_or(true, |m| i < m) {
-                            min = Some(i)
-                        }
+                    if i > sector_size && min.is_none_or(|m| i < m) {
+                        min = Some(i)
                     }
                 }
                 min
@@ -215,7 +213,7 @@ impl SectorSize {
                         sector_size
                     };
 
-                    if min.map_or(true, |m| v < m) {
+                    if min.is_none_or(|m| v < m) {
                         min = Some(v)
                     }
                 }

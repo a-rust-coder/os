@@ -74,7 +74,7 @@ impl Fat12 {
         if sector_size < 512
             || sector_size.count_ones() != 1
             || sector_size > 0xFFFF
-            || (root_dir_entries * 32) % sector_size != 0
+            || (root_dir_entries * 32).is_multiple_of(sector_size)
             || number_of_fats > 0xFF
             || root_dir_entries > 0xFFFF
         {
@@ -89,7 +89,7 @@ impl Fat12 {
             None => {
                 // TODO: optimize the `sectors_per_cluster` choice to get the most possible sectors
                 // with fewer reserved sectors
-                ((total_sectors - root_dir_sectors - 1 + 4084) / 4085).next_power_of_two()
+                ((total_sectors - root_dir_sectors - 1).div_ceil(4085)).next_power_of_two()
             }
         };
 
@@ -101,7 +101,7 @@ impl Fat12 {
         }
 
         let mut count_of_clusters = (total_sectors - root_dir_sectors - 1) / sectors_per_cluster;
-        let fat_size = (count_of_clusters + count_of_clusters / 2 + sector_size - 1) / sector_size;
+        let fat_size = (count_of_clusters + count_of_clusters / 2).div_ceil(sector_size);
         count_of_clusters = (total_sectors - root_dir_sectors - fat_size * number_of_fats - 1)
             / sectors_per_cluster;
         let reserved_sectors = total_sectors
@@ -189,7 +189,8 @@ impl Fat12 {
                 .read_sector(sector_number + 1, &mut sectors[self.sector_size..])?;
         }
 
-        let mut entry = u16::from_le_bytes([sectors[fat_entry_offset], sectors[fat_entry_offset + 1]]);
+        let mut entry =
+            u16::from_le_bytes([sectors[fat_entry_offset], sectors[fat_entry_offset + 1]]);
 
         if (index & 1) == 1 {
             entry >>= 4

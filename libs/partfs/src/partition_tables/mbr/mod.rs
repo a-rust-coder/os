@@ -73,9 +73,9 @@ impl RawMbr {
 
         let mut partitions = [MbrEntry::empty(); 4];
 
-        for i in 0..4 {
+        for (i, partition) in partitions.iter_mut().enumerate() {
             let offset = 446 + i * 16;
-            partitions[i] = MbrEntry::read_from(&buf[offset..offset + 16]);
+            *partition = MbrEntry::read_from(&buf[offset..offset + 16]);
         }
 
         let signature = u16::from_le_bytes([buf[510], buf[511]]);

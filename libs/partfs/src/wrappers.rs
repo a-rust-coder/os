@@ -9,7 +9,7 @@ use mutex::Mutex;
 /// A global wrapper that can be created from any `Disk`. Is used only for creating `SubDisk`s
 pub struct DiskWrapper {
     /// The disk from where it has been created
-    disk: Box<dyn Disk>,
+    disk: Mutex<Box<dyn Disk>>,
     /// The space borrowed for reading [start, end[
     r_borrows: Mutex<Vec<(usize, usize)>>,
     /// The space borrowed for writing [start, end[
@@ -19,11 +19,14 @@ pub struct DiskWrapper {
     weak_self: Mutex<Weak<Self>>,
 }
 
+unsafe impl Send for DiskWrapper {}
+unsafe impl Sync for DiskWrapper {}
+
 impl DiskWrapper {
     /// Creates a new wrapper from a disk
     pub fn new<T: Disk + 'static>(disk: T) -> Arc<Self> {
         let slf = Arc::new(Self {
-            disk: Box::new(disk),
+            disk: Mutex::new(Box::new(disk)),
             r_borrows: Mutex::new(Vec::new()),
             w_borrows: Mutex::new(Vec::new()),
             weak_self: Mutex::new(Weak::new()),
@@ -73,7 +76,7 @@ impl DiskWrapper {
             return Err(DiskErr::Busy);
         }
 
-        if end > self.disk.disk_infos()?.disk_size {
+        if end > self.disk.lock().disk_infos()?.disk_size {
             return Err(DiskErr::InvalidDiskSize);
         }
 
@@ -117,30 +120,30 @@ impl DiskWrapper {
                 return Err(DiskErr::InvalidDiskSize);
             }
 
-            if permissions.read {
-                if (|| {
+            if permissions.read
+                && (|| {
                     for i in r_borrows.clone() {
                         if (i.0 <= start && start < i.1) || (i.0 < end && end <= i.1) {
                             return true;
                         }
                     }
                     false
-                })() {
-                    return Err(DiskErr::SpaceAlreadyInUse);
-                }
+                })()
+            {
+                return Err(DiskErr::SpaceAlreadyInUse);
             }
 
-            if permissions.write {
-                if (|| {
+            if permissions.write
+                && (|| {
                     for i in w_borrows.clone() {
                         if (i.0 <= start && start < i.1) || (i.0 < end && end <= i.1) {
                             return true;
                         }
                     }
                     false
-                })() {
-                    return Err(DiskErr::SpaceAlreadyInUse);
-                }
+                })()
+            {
+                return Err(DiskErr::SpaceAlreadyInUse);
             }
 
             size += end - start;
@@ -178,7 +181,7 @@ impl Disk for DiskWrapper {
             return Err(DiskErr::Busy);
         }
 
-        self.disk.read_sector(sector, buf)
+        self.disk.lock().read_sector(sector, buf)
     }
 
     fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
@@ -191,11 +194,11 @@ impl Disk for DiskWrapper {
             return Err(DiskErr::Busy);
         }
 
-        self.disk.write_sector(sector, buf)
+        self.disk.lock().write_sector(sector, buf)
     }
 
     fn disk_infos(&self) -> Result<crate::DiskInfos, DiskErr> {
-        self.disk.disk_infos()
+        self.disk.lock().disk_infos()
     }
 }
 
@@ -232,7 +235,7 @@ impl Disk for SubDisk {
         if !self
             .sector_size
             .is_supported(sector_size, self.end - self.start)
-            || self.start % sector_size != 0
+            || !self.start.is_multiple_of(sector_size)
         {
             return Err(DiskErr::InvalidSectorSize {
                 found: sector_size,
@@ -254,7 +257,7 @@ impl Disk for SubDisk {
 
         let sector = offset / sector_size;
 
-        parent.disk.read_sector(sector, buf)
+        parent.disk.lock().read_sector(sector, buf)
     }
 
     fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
@@ -280,7 +283,7 @@ impl Disk for SubDisk {
         if !self
             .sector_size
             .is_supported(sector_size, self.end - self.start)
-            || self.start % sector_size != 0
+            || !self.start.is_multiple_of(sector_size)
         {
             return Err(DiskErr::InvalidSectorSize {
                 found: sector_size,
@@ -302,7 +305,7 @@ impl Disk for SubDisk {
 
         let sector = offset / sector_size;
 
-        parent.disk.write_sector(sector, buf)
+        parent.disk.lock().write_sector(sector, buf)
     }
 
     fn disk_infos(&self) -> Result<DiskInfos, DiskErr> {
@@ -367,7 +370,7 @@ impl Disk for FragmentedSubDisk {
             });
         }
 
-        if self.parts.len() == 0 {
+        if self.parts.is_empty() {
             return Err(DiskErr::InvalidSectorIndex {
                 found: sector,
                 max: 0,
@@ -407,7 +410,7 @@ impl Disk for FragmentedSubDisk {
             current_sector += size / sector_size;
         }
 
-        parent.disk.read_sector(offset / sector_size, buf)
+        parent.disk.lock().read_sector(offset / sector_size, buf)
     }
 
     fn write_sector(&self, sector: usize, buf: &[u8]) -> Result<(), DiskErr> {
@@ -426,7 +429,7 @@ impl Disk for FragmentedSubDisk {
             });
         }
 
-        if self.parts.len() == 0 {
+        if self.parts.is_empty() {
             return Err(DiskErr::InvalidSectorIndex {
                 found: sector,
                 max: 0,
@@ -466,7 +469,7 @@ impl Disk for FragmentedSubDisk {
             current_sector += size / sector_size;
         }
 
-        parent.disk.write_sector(offset / sector_size, buf)
+        parent.disk.lock().write_sector(offset / sector_size, buf)
     }
 
     fn disk_infos(&self) -> Result<DiskInfos, DiskErr> {

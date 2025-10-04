@@ -70,37 +70,37 @@ impl GenericMbr {
 
     /// Returnes the partition size (if the partition exists) in sectors
     pub fn partition_size(&self, partition_index: usize) -> Option<usize> {
-        match self.raw.partitions.get(partition_index) {
-            None => None,
-            Some(v) => Some(v.sectors as usize),
-        }
+        self.raw
+            .partitions
+            .get(partition_index)
+            .map(|v| v.sectors as usize)
     }
 
     /// Returns the lba of the first sector of the partition (if it exists)
     pub fn partition_start(&self, partition_index: usize) -> Option<usize> {
-        match self.raw.partitions.get(partition_index) {
-            None => None,
-            Some(v) => Some(v.lba_first as usize),
-        }
+        self.raw
+            .partitions
+            .get(partition_index)
+            .map(|v| v.lba_first as usize)
     }
 
     pub fn partition_type(&self, partition_index: usize) -> Option<PartitionType> {
-        match self.raw.partitions.get(partition_index) {
-            None => None,
-            Some(v) => Some(v.partition_type),
-        }
+        self.raw
+            .partitions
+            .get(partition_index)
+            .map(|v| v.partition_type)
     }
 
     pub fn partition_infos(&self, partition_index: usize) -> Option<PartitionInfos> {
-        match self.raw.partitions.get(partition_index) {
-            None => None,
-            Some(v) => Some(PartitionInfos {
+        self.raw
+            .partitions
+            .get(partition_index)
+            .map(|v| PartitionInfos {
                 lba_start: v.lba_first as usize,
                 size: v.sectors as usize,
                 sector_size: self.sector_size,
                 partition_type: v.partition_type,
-            }),
-        }
+            })
     }
 
     pub const fn sector_size(&self) -> usize {

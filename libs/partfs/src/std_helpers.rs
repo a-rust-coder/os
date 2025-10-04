@@ -48,11 +48,16 @@ impl Disk for DiskFile {
 
         // ### PERFORMS THE READ OPERATION ON THE FILE ###
 
-        if let Err(_) = self.file.lock().seek(SeekFrom::Start(offset as u64)) {
+        if self
+            .file
+            .lock()
+            .seek(SeekFrom::Start(offset as u64))
+            .is_err()
+        {
             return Err(DiskErr::IOErr);
         }
 
-        if let Err(_) = self.file.lock().read_exact(buf) {
+        if self.file.lock().read_exact(buf).is_err() {
             return Err(DiskErr::IOErr);
         }
 
@@ -89,11 +94,11 @@ impl Disk for DiskFile {
 
         // ### PERFORMS THE WRITE OPERATION ON THE FILE ###
 
-        if let Err(_) = self.file.lock().seek(SeekFrom::Start(offset as u64)) {
+        if self.file.lock().seek(SeekFrom::Start(offset as u64)).is_err() {
             return Err(DiskErr::IOErr);
         }
 
-        if let Err(_) = self.file.lock().write_all(buf) {
+        if self.file.lock().write_all(buf).is_err() {
             return Err(DiskErr::IOErr);
         }
 

@@ -57,7 +57,7 @@ impl Disk for MemDisk {
             });
         }
 
-        self.content.lock()[(sector * buf.len())..((sector + 1) * buf.len())].copy_from_slice(&buf);
+        self.content.lock()[(sector * buf.len())..((sector + 1) * buf.len())].copy_from_slice(buf);
         Ok(())
     }
 }

@@ -147,7 +147,8 @@ impl BiosParameterBlock {
             && self.sectors_per_cluster.count_ones() == 1
             && self.reserved_sectors_count != 0
             && self.number_of_fats != 0
-            && ((self.root_entries_count as usize) * 32) % (self.bytes_per_sector as usize) == 0
+            && ((self.root_entries_count as usize) * 32)
+                .is_multiple_of(self.bytes_per_sector as usize)
             && ((self.total_sectors_16 != 0 && self.total_sectors_32 == 0)
                 || (self.total_sectors_32 >= 0x10000 && self.total_sectors_16 == 0))
             && self.media & 0xF0 == 0xF0
