@@ -3,7 +3,7 @@ use crate::{
     partition_tables::mbr::{MbrEntry, PartitionInfos, PartitionType, RawMbr},
     wrappers::{DiskWrapper, SubDisk},
 };
-use alloc::{boxed::Box, sync::Arc};
+use alloc::sync::Arc;
 
 /// This struct allows to choose the sector size. It's always better explicitly specify the sector
 /// size to use, if not specified, will try to use the smallest possible >= 512. For a physical
