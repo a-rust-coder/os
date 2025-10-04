@@ -161,7 +161,42 @@ impl Fat12 {
         }))
     }
 
-    pub fn bios_parameter_block(&self) -> BiosParameterBlock {
+    pub const fn bios_parameter_block(&self) -> BiosParameterBlock {
         self.bpb
+    }
+
+    pub const fn sector_size(&self) -> usize {
+        self.sector_size
+    }
+
+    pub fn get_fat_entry(&self, index: usize, fat_index: usize) -> Result<Option<u16>, DiskErr> {
+        if index >= self.bpb.count_of_clusters() || fat_index >= self.bpb.number_of_fats() {
+            return Ok(None);
+        }
+
+        let fat_offset = index + index / 2;
+        let sector_number = self.bpb.reserved_sectors_count()
+            + (fat_offset / self.sector_size)
+            + fat_index * self.bpb.fat_size();
+        let fat_entry_offset = fat_offset % self.sector_size;
+
+        let mut sectors = vec![0; 2 * self.sector_size];
+
+        self.disk
+            .read_sector(sector_number, &mut sectors[..self.sector_size])?;
+        if fat_offset == self.sector_size - 1 {
+            self.disk
+                .read_sector(sector_number + 1, &mut sectors[self.sector_size..])?;
+        }
+
+        let mut entry = u16::from_le_bytes([sectors[fat_entry_offset], sectors[fat_entry_offset + 1]]);
+
+        if (index & 1) == 1 {
+            entry >>= 4
+        } else {
+            entry &= 0xFFF
+        }
+
+        Ok(Some(entry))
     }
 }

@@ -174,4 +174,24 @@ impl BiosParameterBlock {
         // total_sectors_16 > 0 <=> total_sectors_32 = 0
         (self.total_sectors_16 as usize) | (self.total_sectors_32 as usize)
     }
+
+    pub const fn count_of_clusters(&self) -> usize {
+        (((self.total_sectors_16 as usize) | (self.total_sectors_32 as usize))
+            - (self.reserved_sectors_count as usize)
+            - (self.number_of_fats as usize) * (self.fat_size as usize)
+            - ((self.root_entries_count as usize) * 32) / (self.bytes_per_sector as usize))
+            / (self.sectors_per_cluster as usize)
+    }
+
+    pub const fn reserved_sectors_count(&self) -> usize {
+        self.reserved_sectors_count as usize
+    }
+
+    pub const fn number_of_fats(&self) -> usize {
+        self.number_of_fats as usize
+    }
+
+    pub const fn fat_size(&self) -> usize {
+        self.fat_size as usize
+    }
 }
